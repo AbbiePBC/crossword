@@ -1,4 +1,5 @@
 import sys
+from typing import Optional
 
 from crossword import *
 
@@ -87,7 +88,7 @@ class CrosswordCreator():
 
     def solve(self):
         """
-        Enforce node and arc consistency, and then solve the CSP.
+        Enforce node and arc consistency, and then solve the CSP (constraint satisfaction problem).
         """
         self.enforce_node_consistency()
         self.ac3()
@@ -99,9 +100,15 @@ class CrosswordCreator():
         (Remove any values that are inconsistent with a variable's unary
          constraints; in this case, the length of the word.)
         """
-        raise NotImplementedError
 
-    def revise(self, x, y):
+        for var in self.domains:
+            for word in self.domains[var].copy():
+                if len(word) != var.length:
+                    self.domains[var].remove(word)
+
+        return
+
+    def revise(self, x, y) -> bool:
         """
         Make variable `x` arc consistent with variable `y`.
         To do so, remove values from `self.domains[x]` for which there is no
@@ -110,7 +117,26 @@ class CrosswordCreator():
         Return True if a revision was made to the domain of `x`; return
         False if no revision was made.
         """
-        raise NotImplementedError
+
+        revision_made: bool = False
+        overlap: Optional[tuple[int, int]] = self.crossword.overlaps[x, y]
+
+        if not overlap:
+            return revision_made
+
+        (x_index, y_index) = overlap
+        removed_x_words = set()
+        # TODO: this could possibly be made more efficient by removing the words from the domain
+        #  as we go, rather than creating a set of words to remove and then removing them
+        #  depending on cost associated with set operations vs. removing from a set
+        for y_word in self.domains[y]:
+            for x_word in self.domains[x]:
+                if x_word[x_index] != y_word[y_index]:
+                    removed_x_words.add(x_word)
+                    continue
+        self.domains[x] -= removed_x_words
+
+        return True if removed_x_words else False
 
     def ac3(self, arcs=None):
         """
@@ -121,7 +147,24 @@ class CrosswordCreator():
         Return True if arc consistency is enforced and no domains are empty;
         return False if one or more domains end up empty.
         """
-        raise NotImplementedError
+
+        if not arcs:
+            # all the words which can overlap when entered into the crossword structure
+            arcs = list(self.crossword.overlaps.keys())
+
+        while arcs:
+            x, y = arcs.pop()
+            if self.revise(x, y):
+                # if the domain of x is empty, then the crossword cannot be solved
+                if not self.domains[x]:
+                    return False
+                # if the domain of x is not empty, then we need to check all x neighbors
+                # to see if they are still arc consistent with x
+                # (i.e. if there are still words that fit between the two word-spaces)
+                for x_neighbours in self.crossword.neighbors(x) - {y}:
+                    arcs.add((x_neighbours, x))
+
+        return True
 
     def assignment_complete(self, assignment):
         """
