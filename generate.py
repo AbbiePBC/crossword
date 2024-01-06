@@ -126,17 +126,16 @@ class CrosswordCreator():
 
         (x_index, y_index) = overlap
         removed_x_words = set()
-        # TODO: this could possibly be made more efficient by removing the words from the domain
-        #  as we go, rather than creating a set of words to remove and then removing them
-        #  depending on cost associated with set operations vs. removing from a set
-        for y_word in self.domains[y]:
-            for x_word in self.domains[x]:
-                if x_word[x_index] != y_word[y_index]:
-                    removed_x_words.add(x_word)
-                    continue
+
+        for x_word in self.domains[x]:
+            y_words = self.domains[y] - {x_word}
+            if all(x_word[x_index] != y_word[y_index] for y_word in y_words):
+                removed_x_words.add(x_word)
+
         self.domains[x] -= removed_x_words
 
-        return True if removed_x_words else False
+        return False if len(removed_x_words) == 0 else True
+
 
     def ac3(self, arcs=None):
         """
@@ -148,7 +147,10 @@ class CrosswordCreator():
         return False if one or more domains end up empty.
         """
 
-        if not arcs:
+        if arcs == []:
+            return True
+
+        if arcs is None:
             # all the words which can overlap when entered into the crossword structure
             arcs = list(self.crossword.overlaps.keys())
 
@@ -162,7 +164,8 @@ class CrosswordCreator():
                 # to see if they are still arc consistent with x
                 # (i.e. if there are still words that fit between the two word-spaces)
                 for x_neighbours in self.crossword.neighbors(x) - {y}:
-                    arcs.add((x_neighbours, x))
+                    arcs.append((x_neighbours, x))
+
 
         return True
 
