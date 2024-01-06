@@ -174,14 +174,41 @@ class CrosswordCreator():
         Return True if `assignment` is complete (i.e., assigns a value to each
         crossword variable); return False otherwise.
         """
-        raise NotImplementedError
+
+        for variable in self.domains.keys():
+            if variable not in assignment:
+                return False
+
+        for _, value in assignment.items():
+            if not value:
+                return False
+
+        return True
 
     def consistent(self, assignment):
         """
         Return True if `assignment` is consistent (i.e., words fit in crossword
         puzzle without conflicting characters); return False otherwise.
         """
-        raise NotImplementedError
+
+        # check that all values are distinct
+        if len(set(assignment.values())) != len(assignment.values()):
+            return False
+
+        # check that all values are the correct length
+        for variable, value in assignment.items():
+            if variable.length != len(value):
+                return False
+
+        # check that all values are consistent with neighbors
+        for variable, value in assignment.items():
+            for neighbour in self.crossword.neighbors(variable):
+                if neighbour in assignment:
+                    (variable_index, neighbour_index) = self.crossword.overlaps[variable, neighbour]
+                    if value[variable_index] != assignment[neighbour][neighbour_index]:
+                        return False
+
+        return True
 
     def order_domain_values(self, var, assignment):
         """
@@ -190,7 +217,30 @@ class CrosswordCreator():
         The first value in the list, for example, should be the one
         that rules out the fewest values among the neighbors of `var`.
         """
-        raise NotImplementedError
+
+        domain_values = self.domains[var]
+
+        domain_values_with_elimination_count = dict()
+
+        for value in domain_values:
+            domain_values_with_elimination_count[value] = 0
+            for neighbor in self.crossword.neighbors(var):
+                if neighbor in assignment:
+                    # count the value where it is repeated in the domain of a neighbor
+                    # as this prevents the neighbor from being assigned to the same value
+                    if value in self.domains[neighbor]:
+                        domain_values_with_elimination_count[value] += 1
+                    (var_index, neighbor_index) = self.crossword.overlaps[var, neighbor]
+                    # also count the value when it is inconsistent with a neighbor value in the neighbour's domain
+                    # as this prevents the neighbour from being assigned to the clashing value
+                    # if value[var_index] != assignment[neighbor][neighbor_index]:
+                    #     domain_values_with_elimination_count[value] += 1
+
+        sorted_domain_values_by_elimination_count = sorted(domain_values_with_elimination_count,
+                                                           key=lambda item: item[1])
+
+        return sorted_domain_values_by_elimination_count
+
 
     def select_unassigned_variable(self, assignment):
         """
@@ -200,9 +250,44 @@ class CrosswordCreator():
         degree. If there is a tie, any of the tied variables are acceptable
         return values.
         """
-        raise NotImplementedError
 
-    def backtrack(self, assignment):
+        if len(assignment) >= len(self.domains):
+            raise ValueError("No unassigned variables remaining")
+
+        var_with_domain_values = dict()
+
+
+        # Select the variable with the fewest number of remaining values in its domain.
+
+        var_with_domain_values = {var: len(self.domains[var]) for var in self.domains.keys() \
+                                        if var not in assignment}
+
+        if len(var_with_domain_values) == 0:
+            raise ValueError("No unassigned variables remaining")
+
+        if len(var_with_domain_values) == 1:
+            return list(var_with_domain_values.keys())[0]
+
+        sorted_var_with_domain_values = sorted(var_with_domain_values.items(),
+                                               key=lambda item: item[1] )
+
+        # If tied, list all the variables with the minimum number of remaining values in its domain
+        min_domain_value = sorted_var_with_domain_values[0][1]
+        min_domain_value_vars = [var[0] for var in sorted_var_with_domain_values \
+                                        if var[1] == min_domain_value]
+
+
+        # If there is a tie between variables, choose the one
+        # with the largest degree (has the most neighbors).
+        sorted_vars_by_degree = sorted(min_domain_value_vars, \
+                                       key=lambda item: len(self.crossword.neighbors(item)),
+                                       reverse=True)
+
+        # If there is a tie in both cases, choose arbitrarily.
+        return sorted_vars_by_degree[0]
+
+
+    def backtrack(self, assignment) -> Optional[dict]:
         """
         Using Backtracking Search, take as input a partial assignment for the
         crossword and return a complete assignment if possible to do so.
@@ -211,7 +296,27 @@ class CrosswordCreator():
 
         If no assignment is possible, return None.
         """
-        raise NotImplementedError
+
+        # if the assignment is complete, return it
+        if self.assignment_complete(assignment):
+            return assignment
+
+        # select an unassigned variable
+        var = self.select_unassigned_variable(assignment)
+
+        # for each value in the domain of the variable
+        for value in self.order_domain_values(var, assignment):
+            # add the value to the assignment
+            assignment[var] = value
+            # if the assignment is consistent, then recurse
+            if self.consistent(assignment):
+                result = self.backtrack(assignment)
+                if result:
+                    return result
+            # if the assignment is not consistent, remove the value from the assignment
+            assignment.pop(var)
+
+        return None
 
 
 def main():
